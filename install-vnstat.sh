@@ -35,32 +35,17 @@ else
     fi
 fi
 
-command -v python3 >/dev/null 2>&1 || {
-    echo "错误：python3 不可用"
-    exit 1
-}
+command -v python3 >/dev/null 2>&1 || { echo "错误：python3 不可用"; exit 1; }
 
 echo
 echo "[2/5] 自动识别公网网卡..."
 
 IFACE=$(ip -4 route show default 2>/dev/null | awk 'NR==1 {print $5}')
+[ -n "$IFACE" ] || IFACE=$(ip -6 route show default 2>/dev/null | awk 'NR==1 {print $5}')
+[ -n "$IFACE" ] || IFACE=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}')
+[ -n "$IFACE" ] || IFACE=$(ip -br link 2>/dev/null | awk '$1 != "lo" && $2 ~ /UP/ {print $1}' | head -n1)
 
-if [ -z "$IFACE" ]; then
-    IFACE=$(ip -6 route show default 2>/dev/null | awk 'NR==1 {print $5}')
-fi
-
-if [ -z "$IFACE" ]; then
-    IFACE=$(ip route get 1.1.1.1 2>/dev/null |
-        awk '{for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}')
-fi
-
-if [ -z "$IFACE" ]; then
-    IFACE=$(ip -br link 2>/dev/null |
-        awk '$1 != "lo" && $2 ~ /UP/ {print $1}' | head -n1)
-fi
-
-if [ -z "$IFACE" ] || [ "$IFACE" = "lo" ] ||
-   ! ip link show "$IFACE" >/dev/null 2>&1; then
+if [ -z "$IFACE" ] || [ "$IFACE" = "lo" ] || ! ip link show "$IFACE" >/dev/null 2>&1; then
     echo "错误：无法自动识别公网网卡"
     ip -br link
     exit 1
@@ -82,10 +67,7 @@ elif systemctl list-unit-files 2>/dev/null | grep -q '^vnstatd.service'; then
     SERVICE="vnstatd"
 fi
 
-[ -n "$SERVICE" ] || {
-    echo "错误：找不到 vnStat systemd 服务"
-    exit 1
-}
+[ -n "$SERVICE" ] || { echo "错误：找不到 vnStat systemd 服务"; exit 1; }
 
 echo
 echo "[4/5] 启动 vnStat..."
@@ -106,14 +88,10 @@ echo "[5/5] 创建中文查询命令 vns..."
 
 cat > /usr/local/bin/vns <<'VNS'
 #!/bin/bash
-
 set -u
 
 IFACE=$(ip -4 route show default 2>/dev/null | awk 'NR==1 {print $5}')
-
-if [ -z "$IFACE" ]; then
-    IFACE=$(ip -6 route show default 2>/dev/null | awk 'NR==1 {print $5}')
-fi
+[ -n "$IFACE" ] || IFACE=$(ip -6 route show default 2>/dev/null | awk 'NR==1 {print $5}')
 
 if [ -z "$IFACE" ]; then
     echo "无法自动识别公网网卡"
@@ -157,28 +135,31 @@ try:
         rx, tx, total = values(days[-1])
         print("今日流量")
         print("----------------------------------------")
-        print(f"下载：{gib(rx):>10.2f} GiB")
-        print(f"上传：{gib(tx):>10.2f} GiB")
-        print(f"总流量：{gib(total):>8.2f} GiB")
+        print(f"入向流量：{gib(rx):>10.2f} GiB")
+        print(f"出向流量：{gib(tx):>10.2f} GiB")
+        print(f"总流量：  {gib(total):>10.2f} GiB")
 
     if months:
         rx, tx, total = values(months[-1])
         print()
         print("本月流量")
         print("----------------------------------------")
-        print(f"下载：{gib(rx):>10.2f} GiB")
-        print(f"上传：{gib(tx):>10.2f} GiB")
-        print(f"总流量：{gib(total):>8.2f} GiB")
+        print(f"入向流量：{gib(rx):>10.2f} GiB")
+        print(f"出向流量：{gib(tx):>10.2f} GiB")
+        print(f"总流量：  {gib(total):>10.2f} GiB")
+
+    print()
+    print("流量说明")
+    print("----------------------------------------")
+    print("入向流量 = RX（VPS 接收的数据）")
+    print("出向流量 = TX（VPS 发出的数据）")
+    print("总流量   = 入向 + 出向")
 
     print()
     print("========================================")
     print("vnStat 原始统计")
     print("========================================")
-    result = subprocess.run(
-        ["vnstat", "-i", iface],
-        capture_output=True,
-        text=True
-    )
+    result = subprocess.run(["vnstat", "-i", iface], capture_output=True, text=True)
     print(result.stdout.rstrip())
     print("========================================")
     print()
@@ -187,6 +168,7 @@ except Exception as e:
     print("读取流量数据失败：", e)
     sys.exit(1)
 PY
+
 VNS
 
 chmod +x /usr/local/bin/vns
